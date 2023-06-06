@@ -1,86 +1,109 @@
 import pandas as pd
 import plotly.express as px
+from dash import Dash, dcc, html, Input, Output
 
-# token = open("../mapbox/token.txt").read()
+# Preparing your data for usage *******************************************
 
-# us_cities = pd.read_csv(
-#     # "https://raw.githubusercontent.com/plotly/datasets/master/us-cities-top-1k.csv"
-#     "../data/us-cities-top-1k.csv"
-# )
+df              = pd.read_csv("tweets.csv")
+df["name"]      = pd.Series(df["name"]).str.lower()
+df["date_time"] = pd.to_datetime(df["date_time"])
+df = (
+    df
+        .groupby([df["date_time"].dt.date, "name"])
+            [["number_of_likes", 
+            "number_of_shares"]]
+        .mean()
+        .astype(int)
+)
+df = df.reset_index()
 
-aus_hail = pd.read_csv(
-    './hail-australia-2003-2023.csv'
+# App Layout **************************************************************
+
+stylesheets = ["https://codepen.io/chriddyp/pen/bWLwgP.css"]
+
+app = Dash(__name__, external_stylesheets=stylesheets)
+server = app.server
+
+app.layout = html.Div(
+    [
+        html.Div(
+            html.H1(
+                "Twitter Likes Analysis of Famous People", 
+                style={"textAlign": "center"}
+            ),
+            className="row",
+        ),
+ 
+        html.Div(
+            dcc.Graph(
+                id     = "line-chart",
+                figure = {},  
+            ), 
+            className="row"
+        ),
+ 
+        html.Div(
+            [
+                html.Div(
+                    dcc.Dropdown(
+                        id      = "my-dropdown",
+                        multi   = True,
+                        options = [
+                            {"label": x, "value": x}
+                            for x in sorted(df["name"].unique())
+                        ],
+                        value = ["taylorswift13", "cristiano", "jtimberlake"],
+                        style = {"color": "blue"},
+                    ),
+                    className="three columns",
+                ),
+ 
+                html.Div(
+                    html.A(
+                        id       = "my-link",
+                        children = "Click here to Visit Twitter",
+                        href     = "https://twitter.com/explore",
+                        target   = "_blank",
+                        style    = {
+                            "color"          : "yellow",
+                            "backgroundColor": "blue",
+                            "fontSize"       : "10px",
+                        },
+                    ),
+                    className="two columns",
+                ),
+            ],
+            className="row",
+        ),
+    ]
 )
 
-# usa_hail = pd.read_csv(
-#     '../data/USA_1955-2021_hail.csv'
-# )
-
-fig = px.density_mapbox(
-    aus_hail,
-    lat = 'Latitude',
-    lon = 'Longitude',
-    z = 'Hail size',
-    radius = 30,
-    # hover_name='City',
-    hover_data=['Hail size', 'Date/Time'],
-    # color_discrete_sequence=['fuchsia'],
-
-    # usa_hail,
-    # lat = 'slat',
-    # lon = 'slon',
-    # z = 'mag',
-    # radius = 4,
-    # hover_data=['mag', 'yr'],
-
-    zoom=4,
-    height=1000,
+# Callbacks ********************************************************************
+@app.callback(
+    Output(component_id="line-chart", component_property="figure"),
+    [Input(component_id="my-dropdown", component_property="value")],
 )
+def update_graph(chosen_value):
+    print(f"Values chosen by user: {chosen_value}")
+ 
+    if len(chosen_value) == 0:
+        return {}
+    else:
+        df_filtered = df[df["name"].isin(chosen_value)]
+        fig = px.line(
+            data_frame = df_filtered,
+            x          = "date_time",
+            y          = "number_of_likes",
+            color      = "name",
+            log_y      = True,
+            labels     = {
+                "number_of_likes": "Likes",
+                "date_time"      : "Date",
+                "name"           : "Celebrity",
+            },
+            hover_data = ['number_of_shares']
+        )
+        return fig
 
-fig.update_layout(
-    mapbox_style='open-street-map',
-    # mapbox_style='light',
-    # mapbox_accesstoken=token
-)
-
-fig.update_layout(
-    margin={
-        'r': 0,
-        't': 0,
-        'l': 0,
-        'b': 0
-    }
-)
-
-aus_solar = pd.read_csv(
-    './solar farms in australia.csv'
-).fillna(0)
-
-# usa_solar = pd.read_csv(
-#     '../data/USA_Global-Solar-Power-Tracker-May-2022.csv'
-# ).fillna(0)
-
-fig2 = px.scatter_mapbox(
-    aus_solar,
-    lat = 'latitude',
-    lon = 'longitude',
-    size = 'DC Capacity (MWp)',
-    hover_data = ['Project/', 'DC Capacity (MWp)'],
-
-    # usa_solar,
-    # lat = 'Latitude',
-    # lon = 'Longitude',
-    # size = 'Capacity (MW)',
-    # hover_data = ['Project Name', 'Capacity (MW)'],
-)
-
-fig2.update_traces(
-    marker = dict(
-        color = 'red',
-    )
-)
-
-fig.add_trace(fig2.data[0])
-
-fig.show()
-
+if __name__ == "__main__":
+    app.run_server(debug=false)
